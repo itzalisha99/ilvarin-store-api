@@ -184,7 +184,17 @@
       btn.addEventListener('click', function () {
         var i = Number(btn.getAttribute('data-remove'));
         var p = products[i];
-        if (!window.confirm('Remove "' + p.name + '" from the shop?')) return;
+        if (!btn.getAttribute('data-armed')) {
+          btn.setAttribute('data-armed', '1');
+          btn.textContent = 'Tap again to remove "' + p.name + '"';
+          setTimeout(function () {
+            btn.removeAttribute('data-armed');
+            btn.textContent = 'Remove this product';
+          }, 5000);
+          return;
+        }
+        btn.disabled = true;
+        btn.textContent = 'Removing…';
         products.splice(i, 1);
         saveProducts(products, function (ok, err) {
           if (ok) {
