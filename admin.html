@@ -10,17 +10,23 @@
   .wrap { max-width: 560px; margin: 0 auto; padding: 28px 16px 64px; }
   h1 { font-size: 26px; margin: 0 0 4px; letter-spacing: .06em; }
   .sub { color: #6b6259; margin: 0 0 24px; font-size: 15px; }
+  h2 { font-size: 18px; margin: 26px 0 10px; }
   .card { background: #fff; border: 1px solid #e5ddd3; border-radius: 14px; padding: 16px; margin-bottom: 14px; }
   label { display: block; font-size: 13px; color: #6b6259; margin: 10px 0 4px; }
   label:first-child { margin-top: 0; }
-  input { width: 100%; font-size: 17px; padding: 12px; border: 1px solid #d8cfc4; border-radius: 10px; }
-  input:focus { outline: 2px solid #1c1a18; outline-offset: 1px; }
+  input, select { width: 100%; font-size: 17px; padding: 12px; border: 1px solid #d8cfc4; border-radius: 10px; background: #fff; }
+  input:focus, select:focus { outline: 2px solid #1c1a18; outline-offset: 1px; }
+  input[type="file"] { padding: 8px; font-size: 15px; }
   .row { display: flex; gap: 12px; }
   .row > div { flex: 1; }
   .pname { font-weight: 700; font-size: 16px; margin-bottom: 2px; }
   .pid { font-size: 12px; color: #9a8f83; }
+  .thumb { width: 100%; max-height: 220px; object-fit: contain; background: #f6f2ee; border: 1px solid #e5ddd3; border-radius: 10px; margin-top: 8px; }
+  .nophoto { margin-top: 8px; padding: 14px; text-align: center; font-size: 13px; color: #9a8f83; background: #f6f2ee; border: 1px dashed #d8cfc4; border-radius: 10px; }
   button { width: 100%; font-size: 18px; font-weight: 700; padding: 15px; border: 0; border-radius: 12px; background: #1c1a18; color: #fff; cursor: pointer; }
   button:disabled { opacity: .5; cursor: wait; }
+  button.secondary { background: #fff; color: #1c1a18; border: 1px solid #d8cfc4; }
+  button.danger { background: #fff; color: #b3261e; border: 1px solid #e5b8b4; font-size: 15px; padding: 11px; margin-top: 12px; }
   .msg { margin: 12px 0 0; font-size: 15px; min-height: 22px; }
   .msg.ok { color: #1d7a3d; }
   .msg.err { color: #b3261e; }
@@ -33,7 +39,7 @@
 <body>
 <div class="wrap">
   <h1>ILVARIN ADMIN</h1>
-  <p class="sub">Change product names and prices. That is all this page does.</p>
+  <p class="sub">Change products and prices. Add or remove products.</p>
 
   <div id="loginBox" class="card">
     <label for="pw">Admin password</label>
@@ -44,16 +50,39 @@
   </div>
 
   <div id="editorBox" class="hidden">
+    <h2>Add a new product</h2>
+    <div class="card">
+      <label>Name</label>
+      <input id="newName" type="text" placeholder="Product name">
+      <div class="row"><div>
+        <label>Price (&#2547;) — empty = no price</label>
+        <input id="newPrice" type="number" min="0" step="1" inputmode="numeric" placeholder="e.g. 1650">
+      </div><div>
+        <label>Old price (&#2547;) — optional</label>
+        <input id="newWas" type="number" min="0" step="1" inputmode="numeric" placeholder="e.g. 2800">
+      </div></div>
+      <label>Category</label>
+      <select id="newCat"></select>
+      <label>Photo — needed for a new product</label>
+      <input id="newPhoto" type="file" accept="image/*">
+      <img id="newPreview" class="thumb hidden" alt="New product photo preview">
+      <div style="height:12px"></div>
+      <button id="addBtn" type="button">Add product</button>
+      <p id="addMsg" class="msg"></p>
+    </div>
+
+    <h2>Your products (<span id="count">0</span>)</h2>
     <div id="productList"></div>
     <button id="saveBtn" type="button">Save changes</button>
     <p id="saveMsg" class="msg"></p>
-    <p class="hint">After saving, the live shop shows the new names and prices when the page is reloaded. Leave a price empty when a product has no price yet — it will show as WhatsApp-only, with no add-to-cart button.</p>
+    <p class="hint">After saving, the live shop shows the new names and prices when the page is reloaded. New products appear in the All Items section. Leave a price empty when a product has no price yet — it will show as WhatsApp-only, with no add-to-cart button. Removing a product deletes it from the shop right away.</p>
     <p class="hint"><a href="https://ilvarin-3d-best-sellers.vercel.app/" target="_blank" rel="noopener">Open the live shop &nearr;</a></p>
     <button id="logoutBtn" class="logout" type="button">Log out</button>
   </div>
 </div>
 <script>
 (function () {
+  var CATS = ['Serums', 'Cleansers', 'Moisturizers', 'Sunscreen', 'Toners', 'Masks', 'Eye Care', 'Hair Care'];
   var pwInput = document.getElementById('pw');
   var loginBtn = document.getElementById('loginBtn');
   var loginMsg = document.getElementById('loginMsg');
@@ -63,15 +92,44 @@
   var saveBtn = document.getElementById('saveBtn');
   var saveMsg = document.getElementById('saveMsg');
   var logoutBtn = document.getElementById('logoutBtn');
+  var countEl = document.getElementById('count');
+  var newName = document.getElementById('newName');
+  var newPrice = document.getElementById('newPrice');
+  var newWas = document.getElementById('newWas');
+  var newCat = document.getElementById('newCat');
+  var newPhoto = document.getElementById('newPhoto');
+  var newPreview = document.getElementById('newPreview');
+  var addBtn = document.getElementById('addBtn');
+  var addMsg = document.getElementById('addMsg');
   var password = sessionStorage.getItem('ilvarin-admin-pw') || '';
   var products = [];
+  var newImage = null;
+
+  CATS.forEach(function (c) {
+    var o = document.createElement('option');
+    o.value = c; o.textContent = c;
+    newCat.appendChild(o);
+  });
 
   function showMsg(el, text, ok) {
     el.textContent = text;
     el.className = 'msg ' + (ok ? 'ok' : 'err');
   }
+  function escapeHtml(s) {
+    return String(s).replace(/[&<>"']/g, function (c) {
+      return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+    });
+  }
+  function escapeAttr(s) { return escapeHtml(s).replace(/"/g, '&quot;'); }
+
+  function catOptions(selected) {
+    return CATS.map(function (c) {
+      return '<option value="' + c + '"' + (c === selected ? ' selected' : '') + '>' + c + '</option>';
+    }).join('');
+  }
 
   function render() {
+    countEl.textContent = products.length;
     productList.innerHTML = '';
     products.forEach(function (p, i) {
       var card = document.createElement('div');
@@ -79,6 +137,7 @@
       card.innerHTML =
         '<div class="pname">' + escapeHtml(p.name) + '</div>' +
         '<div class="pid">' + escapeHtml(p.id) + '</div>' +
+        (p.image ? '<img class="thumb" src="' + p.image + '" alt="">' : '<div class="nophoto">No photo — the shop shows its own photo for this product.</div>') +
         '<label>Name</label>' +
         '<input data-i="' + i + '" data-f="name" type="text" value="' + escapeAttr(p.name) + '">' +
         '<div class="row"><div>' +
@@ -87,28 +146,92 @@
         '</div><div>' +
         '<label>Old price (&#2547;) — optional</label>' +
         '<input data-i="' + i + '" data-f="was" type="number" min="0" step="1" inputmode="numeric" value="' + (p.was === null || p.was === undefined ? '' : p.was) + '">' +
-        '</div></div>';
+        '</div></div>' +
+        '<label>Category</label>' +
+        '<select data-i="' + i + '" data-f="cat">' + catOptions(p.cat) + '</select>' +
+        '<label>Change photo — leave empty to keep the current one</label>' +
+        '<input data-i="' + i + '" data-f="photo" type="file" accept="image/*">' +
+        '<button type="button" class="danger" data-remove="' + i + '">Remove this product</button>';
       productList.appendChild(card);
     });
-    productList.querySelectorAll('input').forEach(function (input) {
+    productList.querySelectorAll('input[data-f], select[data-f]').forEach(function (input) {
+      if (input.getAttribute('data-f') === 'photo') {
+        input.addEventListener('change', function () {
+          var i = Number(input.getAttribute('data-i'));
+          var file = input.files && input.files[0];
+          if (!file) return;
+          resizeImage(file).then(function (dataUrl) {
+            products[i].image = dataUrl;
+            render();
+            showMsg(saveMsg, 'Photo ready. Press Save changes to keep it.', true);
+          }).catch(function () {
+            showMsg(saveMsg, 'That photo could not be read. Try another photo.', false);
+          });
+        });
+        return;
+      }
       input.addEventListener('input', function () {
         var i = Number(input.getAttribute('data-i'));
         var f = input.getAttribute('data-f');
         products[i][f] = input.value;
         if (f === 'name') {
-          card.querySelector('.pname').textContent = input.value || '(no name)';
+          var title = input.closest('.card').querySelector('.pname');
+          if (title) title.textContent = input.value || '(no name)';
         }
       });
-      function card() { return input.closest('.card'); }
+    });
+    productList.querySelectorAll('[data-remove]').forEach(function (btn) {
+      btn.addEventListener('click', function () {
+        var i = Number(btn.getAttribute('data-remove'));
+        var p = products[i];
+        if (!window.confirm('Remove "' + p.name + '" from the shop?')) return;
+        products.splice(i, 1);
+        saveProducts(products, function (ok, err) {
+          if (ok) {
+            render();
+            showMsg(saveMsg, 'Removed. The shop no longer shows it.', true);
+          } else {
+            showMsg(saveMsg, 'Could not remove. ' + (err || 'Try again.'), false);
+            loadProducts();
+          }
+        });
+      });
     });
   }
 
-  function escapeHtml(s) {
-    return String(s).replace(/[&<>"']/g, function (c) {
-      return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+  function resizeImage(file) {
+    return new Promise(function (resolve, reject) {
+      var reader = new FileReader();
+      reader.onerror = reject;
+      reader.onload = function () {
+        var img = new Image();
+        img.onerror = reject;
+        img.onload = function () {
+          var max = 800;
+          var w = img.width, h = img.height;
+          if (w > max || h > max) {
+            var s = Math.min(max / w, max / h);
+            w = Math.round(w * s); h = Math.round(h * s);
+          }
+          var canvas = document.createElement('canvas');
+          canvas.width = w; canvas.height = h;
+          canvas.getContext('2d').drawImage(img, 0, 0, w, h);
+          resolve(canvas.toDataURL('image/jpeg', 0.82));
+        };
+        img.src = reader.result;
+      };
+      reader.readAsDataURL(file);
     });
   }
-  function escapeAttr(s) { return escapeHtml(s).replace(/"/g, '&quot;'); }
+
+  function slugify(name) {
+    var s = String(name || '').toLowerCase().trim().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '').replace(/-+/g, '-').replace(/^-|-$/g, '');
+    if (!s) s = 'product';
+    var base = s, n = 2;
+    var taken = products.map(function (p) { return p.id; });
+    while (taken.indexOf(s) !== -1) { s = base + '-' + n; n++; }
+    return s;
+  }
 
   function postAdmin(payload) {
     return fetch('/api/admin', {
@@ -118,12 +241,38 @@
     }).then(function (r) { return r.json().then(function (j) { return { status: r.status, body: j }; }); });
   }
 
+  function cleanedList() {
+    return products.map(function (p) {
+      return {
+        id: p.id,
+        name: String(p.name || '').trim(),
+        price: p.price === '' || p.price === null || p.price === undefined ? null : Number(p.price),
+        was: p.was === '' || p.was === null || p.was === undefined ? null : Number(p.was),
+        cat: CATS.indexOf(p.cat) !== -1 ? p.cat : 'Serums',
+        image: p.image || null
+      };
+    });
+  }
+
+  function saveProducts(list, done) {
+    var body = JSON.stringify({ password: password, products: list });
+    if (body.length > 900000) {
+      done(false, 'The photos are too big in total. Use smaller photos.');
+      return;
+    }
+    postAdmin({ password: password, products: list }).then(function (res) {
+      if (res.status === 200 && res.body && res.body.ok) done(true);
+      else if (res.status === 401) done(false, 'Wrong password. Log out and log in again.');
+      else done(false, (res.body && res.body.error) || 'Try again.');
+    }).catch(function () { done(false, 'Could not reach the server.'); });
+  }
+
   function loadProducts() {
     return fetch('/api/products', { cache: 'no-store' })
       .then(function (r) { return r.json(); })
       .then(function (j) {
         products = (j.products || []).map(function (p) {
-          return { id: p.id, name: p.name, price: p.price === null ? null : p.price, was: p.was === null ? null : p.was };
+          return { id: p.id, name: p.name, price: p.price === null ? null : p.price, was: p.was === null ? null : p.was, cat: p.cat || 'Serums', image: p.image || null };
         });
         loginBox.classList.add('hidden');
         editorBox.classList.remove('hidden');
@@ -157,29 +306,56 @@
     if (e.key === 'Enter') loginBtn.click();
   });
 
+  newPhoto.addEventListener('change', function () {
+    var file = newPhoto.files && newPhoto.files[0];
+    if (!file) { newImage = null; newPreview.classList.add('hidden'); return; }
+    resizeImage(file).then(function (dataUrl) {
+      newImage = dataUrl;
+      newPreview.src = dataUrl;
+      newPreview.classList.remove('hidden');
+    }).catch(function () {
+      newImage = null;
+      newPreview.classList.add('hidden');
+      showMsg(addMsg, 'That photo could not be read. Try another photo.', false);
+    });
+  });
+
+  addBtn.addEventListener('click', function () {
+    var name = newName.value.trim();
+    if (!name) { showMsg(addMsg, 'Give the product a name first.', false); return; }
+    if (!newImage) { showMsg(addMsg, 'Add a photo for the new product first.', false); return; }
+    var p = {
+      id: slugify(name),
+      name: name,
+      price: newPrice.value === '' ? null : Number(newPrice.value),
+      was: newWas.value === '' ? null : Number(newWas.value),
+      cat: newCat.value,
+      image: newImage
+    };
+    products.push(p);
+    addBtn.disabled = true;
+    showMsg(addMsg, 'Adding…', true);
+    saveProducts(cleanedList(), function (ok, err) {
+      addBtn.disabled = false;
+      if (ok) {
+        newName.value = ''; newPrice.value = ''; newWas.value = '';
+        newPhoto.value = ''; newImage = null; newPreview.classList.add('hidden');
+        render();
+        showMsg(addMsg, 'Added. The shop shows it in All Items now.', true);
+      } else {
+        products.pop();
+        showMsg(addMsg, 'Could not add. ' + (err || 'Try again.'), false);
+      }
+    });
+  });
+
   saveBtn.addEventListener('click', function () {
     saveBtn.disabled = true;
     showMsg(saveMsg, 'Saving…', true);
-    var cleaned = products.map(function (p) {
-      return {
-        id: p.id,
-        name: String(p.name || '').trim(),
-        price: p.price === '' || p.price === null || p.price === undefined ? null : Number(p.price),
-        was: p.was === '' || p.was === null || p.was === undefined ? null : Number(p.was)
-      };
-    });
-    postAdmin({ password: password, products: cleaned }).then(function (res) {
+    saveProducts(cleanedList(), function (ok, err) {
       saveBtn.disabled = false;
-      if (res.status === 200 && res.body && res.body.ok) {
-        showMsg(saveMsg, 'Saved. The live shop shows the new names and prices after a reload.', true);
-      } else if (res.status === 401) {
-        showMsg(saveMsg, 'Wrong password. Log out and log in again.', false);
-      } else {
-        showMsg(saveMsg, 'Could not save. ' + ((res.body && res.body.error) || 'Try again.'), false);
-      }
-    }).catch(function () {
-      saveBtn.disabled = false;
-      showMsg(saveMsg, 'Could not reach the server. Try again.', false);
+      if (ok) showMsg(saveMsg, 'Saved. The live shop shows the new names and prices after a reload.', true);
+      else showMsg(saveMsg, 'Could not save. ' + (err || 'Try again.'), false);
     });
   });
 
